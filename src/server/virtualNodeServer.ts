@@ -629,41 +629,23 @@ export class VirtualNodeServer extends EventEmitter {
       logger.info(`Virtual node: Using hybrid approach - rebuilding dynamic data from database`);
       let sentCount = 0;
 
+      // Pre-fetch active nodes so we can include the count in MyNodeInfo
+      const maxNodeAgeHours = parseInt(databaseService.getSetting('maxNodeAgeHours') || '24');
+      const maxNodeAgeDays = maxNodeAgeHours / 24;
+      const allNodes = databaseService.getActiveNodes(maxNodeAgeDays);
+
       // === STEP 1: Rebuild and send MyNodeInfo from database ===
       const localNodeInfo = this.config.meshtasticManager.getLocalNodeInfo();
       if (localNodeInfo) {
-        logger.debug(`Virtual node: Rebuilding MyNodeInfo for local node ${localNodeInfo.nodeId}`);
         const localNode = databaseService.getNode(localNodeInfo.nodeNum);
 
-        // Try to get firmware version from multiple sources (in order of preference):
-        // 1. localNodeInfo (populated from DeviceMetadata)
-        // 2. database (populated from DeviceMetadata via processDeviceMetadata)
-        // 3. fallback to 2.6.0 (more reasonable than 2.0.0)
-        let firmwareVersion = (localNodeInfo as any).firmwareVersion;
-        if (!firmwareVersion && localNode?.firmwareVersion) {
-          firmwareVersion = localNode.firmwareVersion;
-          logger.debug(`Virtual node: Using firmware version from database: ${firmwareVersion}`);
-        }
-        if (!firmwareVersion) {
-          firmwareVersion = '2.6.0';
-          logger.debug(`Virtual node: Using fallback firmware version: ${firmwareVersion}`);
-        }
-
-        // Append MeshMonitor version suffix to firmware version for Virtual Node identification
-        const vnFirmwareVersion = `${firmwareVersion}-MM${packageJson.version}`;
-
-        // Log the node ID being sent to help diagnose identity issues
-        logger.info(`Virtual node: Sending MyNodeInfo with nodeNum=${localNodeInfo.nodeNum} (${localNodeInfo.nodeId}) fw=${vnFirmwareVersion} to ${clientId}`);
+        logger.info(`Virtual node: Sending MyNodeInfo with nodeNum=${localNodeInfo.nodeNum} (${localNodeInfo.nodeId}) nodedbCount=${allNodes.length} to ${clientId}`);
 
         const myNodeInfoMessage = await meshtasticProtobufService.createMyNodeInfo({
           myNodeNum: localNodeInfo.nodeNum,
-          numBands: 13,
-          firmwareVersion: vnFirmwareVersion,
           rebootCount: localNode?.rebootCount || 0,
-          bitrate: 17.24,
-          messageTimeoutMsec: 300000,
           minAppVersion: 20200,
-          maxChannels: 8,
+          nodedbCount: allNodes.length,
         });
 
         if (myNodeInfoMessage) {
@@ -676,10 +658,6 @@ export class VirtualNodeServer extends EventEmitter {
       }
 
       // === STEP 2: Rebuild and send all NodeInfo entries from database ===
-      // Apply activity filtering based on maxNodeAgeHours setting
-      const maxNodeAgeHours = parseInt(databaseService.getSetting('maxNodeAgeHours') || '24');
-      const maxNodeAgeDays = maxNodeAgeHours / 24;
-      const allNodes = databaseService.getActiveNodes(maxNodeAgeDays);
       logger.debug(`Virtual node: Rebuilding ${allNodes.length} active NodeInfo entries from database (maxNodeAgeHours: ${maxNodeAgeHours})`);
 
       for (const node of allNodes) {

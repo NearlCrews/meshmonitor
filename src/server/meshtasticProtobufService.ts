@@ -953,13 +953,9 @@ export class MeshtasticProtobufService {
    */
   async createMyNodeInfo(info: {
     myNodeNum: number;
-    numBands?: number;
-    firmwareVersion?: string;
     rebootCount?: number;
-    bitrate?: number;
-    messageTimeoutMsec?: number;
     minAppVersion?: number;
-    maxChannels?: number;
+    nodedbCount?: number;
   }): Promise<Uint8Array | null> {
     const root = getProtobufRoot();
     if (!root) {
@@ -971,15 +967,14 @@ export class MeshtasticProtobufService {
       const MyNodeInfo = root.lookupType('meshtastic.MyNodeInfo');
       const FromRadio = root.lookupType('meshtastic.FromRadio');
 
+      // Only include fields that exist in the current proto definition.
+      // Fields like numBands, firmwareVersion, bitrate, messageTimeoutMsec,
+      // and maxChannels were removed from the MyNodeInfo proto.
       const myInfo = MyNodeInfo.create({
         myNodeNum: info.myNodeNum,
-        numBands: info.numBands || 13,
-        firmwareVersion: info.firmwareVersion || '2.0.0',
         rebootCount: info.rebootCount || 0,
-        bitrate: info.bitrate || 17.24,
-        messageTimeoutMsec: info.messageTimeoutMsec || 300000,
         minAppVersion: info.minAppVersion || 20200,
-        maxChannels: info.maxChannels || 8,
+        nodedbCount: info.nodedbCount || 0,
       });
 
       const fromRadio = FromRadio.create({
